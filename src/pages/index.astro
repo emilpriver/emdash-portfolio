@@ -1,9 +1,6 @@
 ---
-import { getEmDashCollection, getEntryTerms } from "emdash";
-import { Image } from "emdash/ui";
+import { getEmDashCollection } from "emdash";
 import Base from "../layouts/Base.astro";
-import PostCard from "../components/PostCard.astro";
-import { getReadingTime } from "../utils/reading-time";
 
 const { entries: posts, cacheHint } = await getEmDashCollection("posts");
 
@@ -15,434 +12,178 @@ const sortedPosts = posts.toSorted((a, b) => {
 	return dateB - dateA;
 });
 
-// Find the first post with a featured image for the hero
-const featuredPost = sortedPosts.find((p) => p.data.featured_image);
-const featuredIndex = featuredPost ? sortedPosts.indexOf(featuredPost) : -1;
+// Group posts by year
+const postsByYear = sortedPosts.reduce((acc, post) => {
+	const year = post.data.publishedAt?.getFullYear()?.toString() ?? "Unknown";
+	if (!acc[year]) {
+		acc[year] = [];
+	}
+	acc[year].push(post);
+	return acc;
+}, {} as Record<string, typeof sortedPosts>);
 
-// Get remaining posts (exclude featured if found, limit to 6 for grid)
-const gridPosts = sortedPosts.filter((_, i) => i !== featuredIndex).slice(0, 6);
+// Sort years descending
+const years = Object.keys(postsByYear).sort((a, b) => parseInt(b) - parseInt(a));
 
-// Total posts shown = featured (if any) + grid posts
-const totalShown = (featuredPost ? 1 : 0) + gridPosts.length;
-const hasMorePosts = sortedPosts.length > totalShown;
-
-// Fetch tags for featured post (bylines are already hydrated by getEmDashCollection)
-let featuredTags: Array<{ slug: string; label: string }> = [];
-const featuredBylines = featuredPost?.data.bylines ?? [];
-if (featuredPost) {
-	const tags = await getEntryTerms("posts", featuredPost.data.id, "tag");
-	featuredTags = tags.map((t) => ({ slug: t.slug, label: t.label }));
-}
-
-// Fetch tags for grid posts (bylines are already hydrated by getEmDashCollection)
-const gridPostsWithTags = await Promise.all(
-	gridPosts.map(async (post) => {
-		const tags = await getEntryTerms("posts", post.data.id, "tag");
-		const bylines = post.data.bylines ?? [];
-		return {
-			post,
-			tags: tags.map((t) => ({ slug: t.slug, label: t.label })),
-			bylines,
-		};
-	})
-);
-
-// Format date helper
 function formatDate(date: Date | null | undefined) {
 	if (!date) return null;
 	return date.toLocaleDateString("en-US", {
-		year: "numeric",
-		month: "long",
+		month: "short",
 		day: "numeric",
 	});
 }
+
+function getReadingTime(content: unknown) {
+	if (!content || !Array.isArray(content)) return 0;
+	const text = content.map((block: unknown) => {
+		if (typeof block === "object" && block !== null && "children" in block) {
+			const b = block as { children?: Array<{ text?: string }> };
+			return b.children?.map((c) => c.text).join("") ?? "";
+		}
+		return "";
+	}).join(" ");
+	const words = text.split(/\s+/).filter(Boolean).length;
+	return Math.ceil(words / 200);
+}
 ---
 
-<Base title="My Blog" description="Welcome to my blog">
-	{
-		posts.length === 0 ? (
-			<section class="empty-state">
-				<h2>No posts yet</h2>
-				<p>Create your first post in the admin panel.</p>
-				<a href="/_emdash/admin/content/posts/new" class="btn">
-					Create a post
-				</a>
-			</section>
-		) : (
-			<div class="home-content">
-				{/* Featured Post - Side by side */}
-				{featuredPost && (
-					<section class="featured-section">
-						<div class="featured-grid">
-							<a href={`/posts/${featuredPost.id}`} class="featured-image-link">
-								<div class="featured-image">
-									<Image image={featuredPost.data.featured_image} />
-								</div>
-							</a>
-							<div class="featured-content">
-								<div class="featured-meta">
-									{featuredBylines.length > 0 && (
-										<>
-											<div class="featured-bylines">
-												{featuredBylines.slice(0, 2).map((credit, index) => (
-													<>
-														{index > 0 && <span class="byline-sep">,</span>}
-														<span class="featured-byline">
-															{credit.byline.avatarMediaId && (
-																<img
-																	src={`/_emdash/api/media/file/${credit.byline.avatarMediaId}`}
-																	alt={credit.byline.displayName}
-																	class="featured-byline-avatar"
-																/>
-															)}
-															<span class="featured-byline-name">
-																{credit.byline.displayName}
-															</span>
-														</span>
-													</>
-												))}
-												{featuredBylines.length > 2 && (
-													<span class="byline-more">
-														+{featuredBylines.length - 2}
-													</span>
-												)}
-											</div>
-											<span class="meta-dot" />
-										</>
-									)}
-									{formatDate(featuredPost.data.publishedAt) && (
-										<time>{formatDate(featuredPost.data.publishedAt)}</time>
-									)}
-									<span class="meta-dot" />
-									<span>
-										{getReadingTime(featuredPost.data.content)} min read
-									</span>
-								</div>
-								<a
-									href={`/posts/${featuredPost.id}`}
-									class="featured-title-link"
-								>
-									<h1 class="featured-title">{featuredPost.data.title}</h1>
-								</a>
-								{featuredPost.data.excerpt && (
-									<p class="featured-excerpt">{featuredPost.data.excerpt}</p>
-								)}
-								{featuredTags.length > 0 && (
-									<div class="featured-tags">
-										{featuredTags.map((tag) => (
-											<a href={`/tag/${tag.slug}`} class="featured-tag">
-												{tag.label}
-											</a>
-										))}
-									</div>
-								)}
-							</div>
-						</div>
-					</section>
-				)}
+<Base title="Emil Privér" description="Thoughts on building products, programming, and technology.">
+	<div class="home-content">
+		<header class="home-header">
+			<h1 class="home-title">Emil Priv&eacute;r</h1>
+			<p class="home-bio">
+				Hey, I'm Emil Priv&eacute;r. I'm currently working as a Tech Lead and part-owner at Enad. I love everything about building products — from idea to shipping. I enjoy exploring new technologies and sharing what I learn along the way.
+			</p>
+		</header>
 
-				{/* Latest Posts */}
-				{gridPostsWithTags.length > 0 && (
-					<section class="posts-section">
-						<header class="section-header">
-							<h2 class="section-title">Latest</h2>
-							{hasMorePosts && (
-								<a href="/posts" class="section-link">
-									View all
+		<div class="posts-list">
+			{years.map((year) => (
+				<section class="year-section">
+					<h2 class="year-header">
+						{year}&nbsp;&nbsp;{postsByYear[year].length}
+					</h2>
+					<ul class="year-posts">
+						{postsByYear[year].map((post) => (
+							<li class="post-item">
+								<span class="post-date">
+									{formatDate(post.data.publishedAt)}
+								</span>
+								<a href={`/posts/${post.id}`} class="post-title">
+									{post.data.title}
 								</a>
-							)}
-						</header>
-						<div class="posts-grid">
-							{gridPostsWithTags.map(({ post, tags, bylines }) => (
-								<PostCard
-									title={post.data.title ?? "Untitled"}
-									excerpt={post.data.excerpt}
-									featuredImage={post.data.featured_image}
-									href={`/posts/${post.id}`}
-									date={post.data.publishedAt ?? undefined}
-									readingTime={getReadingTime(post.data.content)}
-									tags={tags}
-									bylines={bylines}
-								/>
-							))}
-						</div>
-					</section>
-				)}
-			</div>
-		)
-	}
+								<span class="post-meta">
+									{getReadingTime(post.data.content)} min
+								</span>
+							</li>
+						))}
+					</ul>
+				</section>
+			))}
+		</div>
+	</div>
 </Base>
 
 <style>
 	.home-content {
-		max-width: var(--wide-width);
+		max-width: var(--content-width);
 		margin: 0 auto;
 		padding: var(--spacing-16) var(--spacing-6);
 	}
 
-	/* Featured Section - Side by side */
-	.featured-section {
+	.home-header {
 		margin-bottom: var(--spacing-16);
 	}
 
-	.featured-grid {
-		display: grid;
-		grid-template-columns: repeat(3, 1fr);
-		gap: var(--spacing-8);
-		align-items: center;
-	}
-
-	.featured-image-link {
-		grid-column: 1 / 3;
-		display: block;
-		/* Extend to viewport edge, but cap at -6rem minimum extension */
-		margin-left: min(
-			-6rem,
-			calc(-1 * (var(--spacing-6) + (100vw - var(--wide-width)) / 2))
-		);
-	}
-
-	.featured-image {
-		overflow: hidden;
-		border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
-		background: var(--color-surface);
-	}
-
-	.featured-image img {
-		width: 100%;
-		height: auto;
-		aspect-ratio: 4 / 3;
-		object-fit: cover;
-		transition: transform 0.4s ease;
-	}
-
-	.featured-image-link:hover .featured-image img,
-	.featured-grid:has(.featured-title-link:hover) .featured-image img {
-		transform: scale(1.02);
-	}
-
-	.featured-content {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-4);
-	}
-
-	.featured-meta {
-		display: flex;
-		align-items: center;
-		flex-wrap: wrap;
-		column-gap: var(--spacing-3);
-		row-gap: var(--spacing-1);
-		font-size: var(--font-size-sm);
-		color: var(--color-muted);
-	}
-
-	.meta-dot {
-		width: 3px;
-		height: 3px;
-		border-radius: 50%;
-		background: var(--color-muted);
-	}
-
-	/* Featured bylines */
-	.featured-bylines {
-		display: flex;
-		align-items: center;
-		gap: 2px;
-	}
-
-	.featured-byline {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--spacing-2);
-	}
-
-	.featured-byline-avatar {
-		width: var(--avatar-size-md);
-		height: var(--avatar-size-md);
-		border-radius: 50%;
-		object-fit: cover;
-	}
-
-	.featured-byline-name {
-		font-weight: 500;
-		color: var(--color-text-secondary);
-	}
-
-	.byline-sep {
-		color: var(--color-muted);
-		margin-right: 2px;
-	}
-
-	.byline-more {
-		font-size: var(--font-size-xs);
-		color: var(--color-muted);
-		margin-left: 2px;
-	}
-
-	.featured-title-link {
-		text-decoration: none;
-		color: inherit;
-	}
-
-	.featured-title {
-		font-size: clamp(var(--font-size-2xl), 4vw, var(--font-size-4xl));
+	.home-title {
+		font-size: var(--font-size-4xl);
 		font-weight: 700;
-		line-height: var(--leading-tight);
 		letter-spacing: var(--tracking-tight);
-		transition: color var(--transition-fast);
+		margin-bottom: var(--spacing-6);
 	}
 
-	.featured-title-link:hover .featured-title,
-	.featured-grid:has(.featured-image-link:hover) .featured-title {
-		color: var(--color-accent);
-	}
-
-	.featured-excerpt {
+	.home-bio {
 		font-size: var(--font-size-lg);
 		line-height: var(--leading-relaxed);
 		color: var(--color-text-secondary);
 	}
 
-	.featured-tags {
+	.posts-list {
 		display: flex;
-		flex-wrap: wrap;
-		gap: var(--spacing-2);
-		margin-top: var(--spacing-2);
+		flex-direction: column;
+		gap: var(--spacing-12);
 	}
 
-	.featured-tag {
-		display: inline-block;
-		padding: var(--spacing-1) var(--spacing-3);
+	.year-section {
+	}
+
+	.year-header {
 		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-		background: var(--color-surface);
-		border-radius: var(--radius);
-		text-decoration: none;
-		transition:
-			color var(--transition-fast),
-			background var(--transition-fast);
-	}
-
-	.featured-tag:hover {
-		color: var(--color-text);
-		background: var(--color-border);
-	}
-
-	/* Section header */
-	.section-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: baseline;
-		margin-bottom: var(--spacing-8);
-		padding-bottom: var(--spacing-4);
+		font-weight: 500;
+		color: var(--color-muted);
+		margin-bottom: var(--spacing-4);
+		padding-bottom: var(--spacing-2);
 		border-bottom: 1px solid var(--color-border-subtle);
 	}
 
-	.section-title {
-		font-size: var(--font-size-sm);
-		font-weight: 500;
-		text-transform: uppercase;
-		letter-spacing: var(--tracking-wider);
-		color: var(--color-muted);
+	.year-posts {
+		list-style: none;
+		padding: 0;
+		margin: 0;
 	}
 
-	.section-link {
+	.post-item {
+		display: flex;
+		align-items: baseline;
+		gap: var(--spacing-4);
+		padding: var(--spacing-3) 0;
+	}
+
+	.post-date {
 		font-size: var(--font-size-sm);
-		color: var(--color-accent);
+		color: var(--color-muted);
+		min-width: 60px;
+		flex-shrink: 0;
+	}
+
+	.post-title {
+		font-size: var(--font-size-base);
+		color: var(--color-text);
 		text-decoration: none;
+		flex: 1;
 		transition: color var(--transition-fast);
 	}
 
-	.section-link:hover {
-		color: var(--color-accent-hover);
+	.post-title:hover {
+		color: var(--color-accent);
 	}
 
-	/* Posts Grid */
-	.posts-section {
-	}
-
-	.posts-grid {
-		display: grid;
-		grid-template-columns: repeat(3, 1fr);
-		gap: var(--spacing-12) var(--spacing-8);
-	}
-
-	/* Empty State */
-	.empty-state {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: var(--spacing-3);
-		text-align: center;
-		padding: var(--spacing-20) var(--spacing-6);
-		max-width: 400px;
-		margin: 0 auto;
-	}
-
-	.empty-state h2 {
-		font-size: var(--font-size-2xl);
-		font-weight: 600;
-	}
-
-	.empty-state p {
-		color: var(--color-muted);
-	}
-
-	.btn {
-		display: inline-block;
-		margin-top: var(--spacing-4);
-		padding: var(--spacing-3) var(--spacing-6);
-		background: var(--color-accent);
-		color: var(--color-on-accent);
-		text-decoration: none;
-		border-radius: var(--radius);
+	.post-meta {
 		font-size: var(--font-size-sm);
-		font-weight: 500;
-		transition: background var(--transition-fast);
+		color: var(--color-muted);
+		flex-shrink: 0;
 	}
 
-	.btn:hover {
-		background: var(--color-accent-hover);
-	}
-
-	/* Responsive */
-	@media (max-width: 900px) {
+	@media (max-width: 640px) {
 		.home-content {
-			padding: var(--spacing-6) var(--spacing-4) var(--spacing-12);
+			padding: var(--spacing-8) var(--spacing-4);
 		}
 
-		.featured-image-link {
-			margin-left: 0;
+		.home-title {
+			font-size: var(--font-size-3xl);
 		}
 
-		.featured-grid {
-			grid-template-columns: 1fr;
-			gap: var(--spacing-6);
+		.post-item {
+			flex-wrap: wrap;
+			gap: var(--spacing-2);
 		}
 
-		.featured-image {
-			border-radius: var(--radius-lg);
+		.post-date {
+			min-width: auto;
 		}
 
-		.featured-image img {
-			aspect-ratio: 16 / 9;
-		}
-
-		.posts-grid {
-			grid-template-columns: repeat(2, 1fr);
-			gap: var(--spacing-8) var(--spacing-6);
-		}
-	}
-
-	@media (max-width: 600px) {
-		.featured-title {
-			font-size: var(--font-size-2xl);
-		}
-
-		.posts-grid {
-			grid-template-columns: 1fr;
-			gap: var(--spacing-8);
+		.post-meta {
+			width: 100%;
+			padding-left: calc(60px + var(--spacing-4));
 		}
 	}
 </style>
